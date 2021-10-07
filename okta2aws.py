@@ -2,7 +2,7 @@ import json, requests, base64, xmltodict, urllib.parse
 import sys
 from bs4 import BeautifulSoup
 
-#******************************************************************************
+#*******************************************************************************
 #
 # Function Name:  oktaAuth
 # By: Scott Morris <smmorris@gmail.com>
@@ -26,15 +26,30 @@ from bs4 import BeautifulSoup
 #   o oktaUrl - string - the URL of the okta server (https://okta.example.com/)
 #
 # Returns:
-#   o the session token - string
+# Returns:
+#   o response - dictionary - Contains a boolean 'success' element indicating
+#       whether the operation was successful (True) or not (False). Also
+#       contains a string 'message' element whose value is either:
+#           - a dictionary containing either information about the error
+#           - a string representing the session token
 #
 # Usage Example:
 # 
-# sessionToken = oktaAuth(username,password,oktaUrl)
+# ret = oktaAuth(username,password,oktaUrl)
+# if ret['success']:
+#   sessionToken = ret['message']
+# else:
+#   print("Error:", ret['message']
 #
-#******************************************************************************
+#*******************************************************************************
 
 def oktaAuth(username,password,oktaUrl):
+
+    # Dictionary with status and response that we will return
+    ret = {
+            'success': False,
+            'message': ''
+          }
 
     # Assemble the url that we'll authenticate to OKTA with
     oktaAuthUrl = oktaUrl + "/api/v1/authn"
@@ -47,11 +62,23 @@ def oktaAuth(username,password,oktaUrl):
 
     # Make the call, grab the response
     response = requests.post( oktaAuthUrl, headers=headerDict, data=oktaCreds)
+    
+    # If the call did not complete successfully, gather some information
+    if response.status_code < 200 or response.status_code >= 300:
+        ret['success'] = False
+        ret['message'] = response.__dict__
 
-    # Return the session token
-    return response.json()['sessionToken']
+    # If the call completed successfully, grab the session token
+    else:
+        # Return the session token
+        ret['success'] = True
+        ret['message'] = response.json()['sessionToken']
 
-#******************************************************************************
+    # Return our dictionary
+    return ret
+
+
+#*******************************************************************************
 #
 # Function Name: oktaGetSamlResponse
 # By: Scott Morris <smmorris@gmail.com>
@@ -81,7 +108,7 @@ def oktaAuth(username,password,oktaUrl):
 #
 # samlb64enc = oktaGetSamlResponse(oktaUrl,sessionToken,oktaForwardUrl)
 #
-#******************************************************************************
+#*******************************************************************************
 
 def oktaGetSamlResponse(oktaUrl,sessionToken,oktaForwardUrl):
 
@@ -234,9 +261,13 @@ def getOktaUrl(fullUrl):
 #   o oktaUrl - string - the URL of the Okta IDP in the format: https://<fqdn>/
 #
 # Returns:
-#   o creds - dictionary - the credentials needed to run commands against the
-#       AWS account using the assumed role. This information is used in future
-#       operations in AWS with this role assumption.
+#   o response - dictionary - Contains a boolean 'success' element indicating
+#       whether the operation was successful (True) or not (False). Also
+#       contains a string 'message' element whose value is a dictionary
+#       containing either information about the error, or the credentials needed
+#       to run commands against the AWS account using the assumed role. This
+#       information is used in future operations in AWS with this role
+#       assumption.
 #
 # Usage Example:
 #
@@ -244,22 +275,38 @@ def getOktaUrl(fullUrl):
 # pw = getpass.getpass("PID Password: ") # requires import of getpass
 # acctUrl = "https://okta.example.com/home/amazon_aws/0oa3notarealurl490x7/272"
 # oktaUrl = "https://okta.example.com"
-# creds = assume(un,pw,acctUrl,oktaUrl)
+# ret = assume(un,pw,acctUrl,oktaUrl)
+# if ret['success']:
+#   creds = ret['message']
+# else:
+#   print("Error:",ret['message']
+#
 # print(creds)
 #
-#******************************************************************************
+#*******************************************************************************
 
 def assume(username,password,oktaForwardUrl):
+
+    response = {
+            'success': True,
+            'message': ''
+        }
 
     # Pull the protocol and fqdn out of the okta url - like https://server.com
     oktaUrl = getOktaUrl(oktaForwardUrl)
 
     # Retrieve the session token
-    sessionToken = oktaAuth(username,password,oktaUrl)
+    ret = oktaAuth(username,password,oktaUrl)
+    if ret['success'] == False:
+        return ret
+
+    sessionToken = ret['message']
 
     # Retrieve the base64-encoded SAML response from the OKTA server
     samlb64enc = oktaGetSamlResponse(oktaUrl,sessionToken,oktaForwardUrl)
 
     # Return the role assumption credentials from AWS
-    return awsAssumeRole(samlb64enc)
+    response['message'] = awsAssumeRole(samlb64enc)
+
+    return response
 
