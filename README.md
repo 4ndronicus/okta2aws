@@ -28,17 +28,27 @@ pip install <module name>
 ## Usage ##
 1. Import the module.
 1. You will then need 3 things to call the module:
-   1. OKTA username
-   1. OKTA password
-   1. OKTA user URL
+   * OKTA username
+   * OKTA password
+   * OKTA user URL
 1. Call the 'assume' function
+1. A dictionary is returned with two elements:
+   * 'success' - boolean - whether the operation succeeded
+   * 'message' - dictionary - contains one of the following:
+      * information about the error
+      * the session credentials
 
 ```
 import okta2aws
 
 # You will then prompt user for OKTA username, password, and URL
 
-sessionCredentials = okta2aws(username,password,oktaUrl)
+ret = okta2aws(username,password,oktaUrl)
+if ret['success']:
+  sessionCredentials = ret['message']
+else:
+  print("Error:",ret['message'])
+
 ```
 Then, you can use those credentials to perform AWS calls.
 
